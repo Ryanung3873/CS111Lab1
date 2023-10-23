@@ -1,17 +1,22 @@
-## UID: 123456789
+## UID: 505718918
 
 ## Pipe Up
 
-One sentence description
+Building a c script that can act as a pipe operator ( | ) where users can chain commands after ./pipe and it will pipe the input and output from each of the calls.
 
 ## Building
 
-Explain briefly how to build your program
-
+gcc -o pipe pipe.c
 ## Running
 
-Show an example run of your program, using at least two additional arguments, and what to expect
+./pipe ls cat wc
+OUTPUT: 4 4 39
+
+./pipe ls cat wc wc
+OUTPUT: 1 3 24
+
+What is happening is that it is piping the output from each previous call to the current's call input until it outputs it.
 
 ## Cleaning up
 
-Explain briefly how to clean up all binary files
+make clean
