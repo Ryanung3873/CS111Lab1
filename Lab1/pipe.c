@@ -1,69 +1,75 @@
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <errno.h>
-int main(int argc, char *argv[])
-{
-	if (argc == 1){
-		printf("error, not enough parameters");
-		return(EINVAL);
-	}
-	int numPipes = argc - 2;
-	if (numPipes <= 0) {
-		int return_value = execlp(argv[1], argv[1], NULL);
-		printf("Failed");
-		return errno;
-	}
-	else{
-		int fd[8][2];
-		pipe(fd[0]);
-		
-		int prevRead = fd[0][0];
-		int prevWrite = fd[0][1];
-		for (int i = 1; i < argc ; i++){
-			pipe(fd[i - 1]);
-			pid_t pid = fork();
-			if (pid == 0){
-				if ( i == 1){
-					close(prevRead);
-					dup2(prevWrite, 1);
-					close(prevWrite);
-				}
-				// last case
-				else if (i == argc - 1){
-					close(prevWrite);
-					dup2(prevRead, 0);
-					close(prevRead);
-				}
-				else{
-					close(prevRead);
-					dup2(prevWrite, 1);
-					close(prevWrite);
-				}
-				
-				int return_value = execlp(argv[i], argv[i], NULL);
-				if (return_value == -1){
-					perror("execlp");
-				}
-				return errno;
-			}
-			else{
-				int status;
-				wait(&status);
-				if (!WIFEXITED(status) || WEXITSTATUS(status) != 0){
-					return(WEXITSTATUS(status));
-				}
-				close(prevRead);
-				close(prevWrite);
-				prevRead = fd[i - 1][0];
-				prevWrite = fd[i - 1][1];
-			}
-		}
 
-	}
-	return 0;
-	}
+int main(int argc, char *argv[]) {
+    // error cehck
+    if (argc < 2) {
+        fprintf(stderr, "Usage: %s command1 command2 ... commandN\n", argv[0]);
+        return EINVAL;
+    }
+    int prev = STDIN_FILENO;
+    int pipefd[2];
 
-	
+    // initial pipe
+    if (pipe(pipefd) != 0) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+    }
+    // iterate thru pipes
+    for (int i = 1; i < argc; i++) {
+        int pid = fork();
+
+        if (pid == -1) {
+            perror("fork");
+            exit(EXIT_FAILURE);
+        }
+        // child process
+        if (pid == 0) {
+            if (prev != STDIN_FILENO) {
+                dup2(prev, STDIN_FILENO);
+                close(prev);
+            }
+            // if not last, redirect the output to da pipe.
+            if (i != argc - 1) {
+                dup2(pipefd[1], STDOUT_FILENO);
+                close(pipefd[1]);
+            }
+            // executes cmd
+            execlp(argv[i], argv[i], NULL);
+            perror("execvp");
+            exit(EXIT_FAILURE);
+        } 
+        // parent process
+        else {
+            int status;
+            waitpid(pid, &status, 0);
+            int exitStatus = WEXITSTATUS(status);
+
+            if (exitStatus != 0) {
+                return exitStatus;
+            }
+
+            if (prev != STDIN_FILENO) {
+                close(prev);
+            }
+            prev = pipefd[0];
+            close(pipefd[1]);
+            pipe(pipefd);
+        }
+    }
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    if (argc >= 2) {
+        close(prev);
+    } else {
+        return 0;
+    }
+
+    return 0;
+}
+
